@@ -1,6 +1,19 @@
 #!/bin/bash
 set -e
 
+LOG_FILE="/var/log/butter-t0aster.log"
+
+error_handler() {
+    echo "🛑 error in freezer.sh - see $LOG_FILE"
+    if [ -f "$LOG_FILE" ]; then
+        cat "$LOG_FILE"
+    fi
+    exit 1
+}
+
+trap 'error_handler' ERR
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 BEFORE=$(lsblk -o NAME,SIZE,TYPE | grep disk | awk '{print $1","$2}')
 echo "     👉 plug in a USB drive right now to format it and label it 'backups' "
 echo ""

@@ -38,9 +38,14 @@ else
 fi
 
 if [ -f /var/lib/dpkg/lock-frontend ]; then
-    echo "   🔓 forcefully unlock dpkg "
-    rm -f /var/lib/dpkg/lock-frontend
-    rm -f /var/lib/dpkg/lock
+    echo "   🔓 forcefully unlock dpkg (only if not actively running apt)"
+    # Check if apt is running to avoid corruption
+    if ! pgrep -f apt >/dev/null; then
+        rm -f /var/lib/dpkg/lock-frontend
+        rm -f /var/lib/dpkg/lock
+    else
+        echo "   ⚠️ apt is running, skipping unlock to avoid corruption"
+    fi
 fi
 echo ""
 
@@ -93,9 +98,11 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-echo""
+echo ""
 
-echo "📸 configuring GRUB-BTRFS for boot snapshots "
+if ! grep -q '^GRUB_DISABLE_OS_PROBER=true' /etc/default/grub; then
+    echo 'GRUB_DISABLE_OS_PROBER=true' >> /etc/default/grub
+fi
 if ! systemctl enable --now grub-btrfsd; then
     echo "🟠 enable GRUB-BTRFS service failed " >&2
     echo "   this is not critical - let's continue "
@@ -252,10 +259,14 @@ RemainAfterExit=no
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable auto_backup.service
-echo ""
-
-echo "1️⃣ 1️⃣  disable sleep when lid is closed (in logind.conf) 💡 "
+sy# Backup existing config and append only missing keys
+  cp /etc/systemd/logind.conf /etc/systemd/logind.conf.backup 2>/dev/null || true
+  if ! grep -q '^HandleLidSwitch=' /etc/systemd/logind.conf; then
+      echo 'HandleLidSwitch=ignore' >> /etc/systemd/logind.conf
+  fi
+  if ! grep -q '^HandleLidSwitchDocked=' /etc/systemd/logind.conf; then
+      echo 'HandleLidSwitchDocked=ignore' >> /etc/systemd/logind.conf
+  fio "1️⃣ 1️⃣  disable sleep when lid is closed (in logind.conf) 💡 "
 read -p "     ❓ should the laptop remain active when its lid is closed? (y/n): " lid_response
 if [[ "$lid_response" == "y" || "$lid_response" == "Y" ]]; then
   echo "       configure the laptop to remain active with the lid closed"
@@ -348,7 +359,7 @@ echo "   Now, do you have a USB device available for backups (do not plug it in 
 read -p "   Would you like the next script to prepare this drive for 🛟 backups❓ (y/n): " usb_response
 if [[ "$usb_response" == "y" || "$usb_response" == "Y" ]]; then
     echo "   ⚙️ open and run freezer.sh"
-    wget -O /home/$SUDO_USER/usb-backup.sh https://raw.githubusercontent.com/lerez0/butter-t0aster/main/freezer.sh || { echo "🛑 failed to download freezer.sh " >&2; exit 1; }
+    wget -O /home/$SUDO_USER/freezer.sh https://raw.githubusercontent.com/lerez0/butter-t0aster/main/freezer.sh || { echo "🛑 failed to download freezer.sh " >&2; exit 1; }
     chmod +x /home/$SUDO_USER/freezer.sh
     sudo bash /home/$SUDO_USER/freezer.sh
 fi
