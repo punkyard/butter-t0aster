@@ -116,17 +116,18 @@ umount /mnt
 echo "   first, mount /home partition "
 mount "$DISK_HOME" /mnt/home || { echo "🛑 failed to mount /home temporarily "; exit 1; }
 echo "   and back up its content (including hidden files)"
-mkdir -p /tmp/home_backup
-cp -a /home/.* /tmp/home_backup/ || { echo "🛑 failed to backup home contents "; exit 1; }
+HOME_BACKUP_DIR="/tmp/home_backup_$$"
+mkdir -p "$HOME_BACKUP_DIR"
+cp -a /home/. "$HOME_BACKUP_DIR"/ || { echo "🛑 failed to backup home contents "; exit 1; }
 echo ""
 if ! btrfs subvolume list /mnt/home | grep -q "@home"; then
     echo "   @home subvolume not found: "
     btrfs subvolume create /mnt/home/@home
-    echo "   🔁 restore /home content to @home subvolume (including hidden files)"
-    cp -a /tmp/home_backup/.* /mnt/home/@home/ || { echo "🛑 failed to restore home contents "; exit 1; }
+    echo "   🔁 restore /home content to @home subvolume (including hidden files and directories)"
+    cp -a "$HOME_BACKUP_DIR"/. /mnt/home/@home/ || { echo "🛑 failed to restore home contents "; exit 1; }
 fi
-if [[ -d /tmp/home_backup ]]; then
-    rm -rf /tmp/home_backup
+if [[ -d "$HOME_BACKUP_DIR" ]]; then
+    rm -rf "$HOME_BACKUP_DIR"
 fi
 umount /mnt/home
 rm -rf /mnt/home
@@ -146,9 +147,12 @@ echo ""
 echo "5️⃣  configure /etc/fstab for persistence 💾 "
 UUID_ROOT=$(blkid -s UUID -o value "$DISK_ROOT")
 UUID_HOME=$(blkid -s UUID -o value "$DISK_HOME")
-# Remove only the specific / and /home BTRFS entries to avoid deleting unrelated ones
-sed -i "\|^UUID=.* / .*btrfs.*subvol=@rootfs|d" /etc/fstab
-sed -i "\|^UUID=.* /home .*btrfs.*subvol=@home|d" /etc/fstab
+# Remove only managed / and /home BTRFS entries (keep unrelated BTRFS entries intact)
+awk '
+!($1 !~ /^#/ && $2 == "/" && $3 == "btrfs" && $4 ~ /(^|,)subvol=@rootfs(,|$)/) &&
+!($1 !~ /^#/ && $2 == "/home" && $3 == "btrfs" && $4 ~ /(^|,)subvol=@home(,|$)/)
+' /etc/fstab > /tmp/fstab.butter-t0aster
+mv /tmp/fstab.butter-t0aster /etc/fstab
 echo "UUID=$UUID_ROOT /      btrfs defaults,noatime,compress=zstd,ssd,space_cache=v2,subvol=@rootfs 0 1" | tee -a /etc/fstab
 echo "UUID=$UUID_HOME /home  btrfs defaults,noatime,compress=zstd,ssd,space_cache=v2,subvol=@home  0 2" | tee -a /etc/fstab
 echo "✅ /etc/fstab updated successfully."

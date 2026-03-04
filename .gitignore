@@ -10,6 +10,8 @@ ressources/
 *.user
 *.userosscache
 *.sln.docstates
+USER.md
+TODO.md
 
 # macOS
 .DS_*

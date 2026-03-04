@@ -98,4 +98,4 @@ Grab it at [firstb00t repo](https://github.com/lerez0/firstb00t). Expect a quick
 
 We'd like to thank [JustAGuy Linux](https://www.youtube.com/@JustAGuyLinux) and [Stephen's Tech Talks](https://www.youtube.com/@stephenstechtalks5377) for their inspiration
 
-<p align="center"><b>made with ⏳ by le rez0.net</b></p>
+<p align="center"><b>made with ⏳ by punkyard</b></p>

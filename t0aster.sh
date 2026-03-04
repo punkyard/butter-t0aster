@@ -37,14 +37,14 @@ else
     echo "   unattended-upgrades is not installed "
 fi
 
-if [ -f /var/lib/dpkg/lock-frontend ]; then
-    echo "   🔓 forcefully unlock dpkg (only if not actively running apt)"
-    # Check if apt is running to avoid corruption
-    if ! pgrep -f apt >/dev/null; then
+if [ -f /var/lib/dpkg/lock-frontend ] || [ -f /var/lib/dpkg/lock ]; then
+    echo "   🔎 check package manager activity before touching lock files "
+    if pgrep -x apt >/dev/null || pgrep -x apt-get >/dev/null || pgrep -x dpkg >/dev/null || pgrep -f unattended-upgrade >/dev/null; then
+        echo "   ⚠️ apt/dpkg process is active, keeping lock files untouched "
+    else
+        echo "   🔓 stale dpkg lock files detected, removing safely "
         rm -f /var/lib/dpkg/lock-frontend
         rm -f /var/lib/dpkg/lock
-    else
-        echo "   ⚠️ apt is running, skipping unlock to avoid corruption"
     fi
 fi
 echo ""
@@ -107,7 +107,6 @@ if ! systemctl enable --now grub-btrfsd; then
     echo "🟠 enable GRUB-BTRFS service failed " >&2
     echo "   this is not critical - let's continue "
 fi
-echo 'GRUB_DISABLE_OS_PROBER=true' >> /etc/default/grub
 if ! update-grub; then
     echo "🟠 GRUB update failed " >&2
     echo "   this is not critical - let's continue "
@@ -259,21 +258,21 @@ RemainAfterExit=no
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-sy# Backup existing config and append only missing keys
-  cp /etc/systemd/logind.conf /etc/systemd/logind.conf.backup 2>/dev/null || true
-  if ! grep -q '^HandleLidSwitch=' /etc/systemd/logind.conf; then
-      echo 'HandleLidSwitch=ignore' >> /etc/systemd/logind.conf
-  fi
-  if ! grep -q '^HandleLidSwitchDocked=' /etc/systemd/logind.conf; then
-      echo 'HandleLidSwitchDocked=ignore' >> /etc/systemd/logind.conf
-  fio "1️⃣ 1️⃣  disable sleep when lid is closed (in logind.conf) 💡 "
+echo "1️⃣ 1️⃣  disable sleep when lid is closed (in logind.conf) 💡 "
 read -p "     ❓ should the laptop remain active when its lid is closed? (y/n): " lid_response
 if [[ "$lid_response" == "y" || "$lid_response" == "Y" ]]; then
   echo "       configure the laptop to remain active with the lid closed"
-  cat <<EOF | tee /etc/systemd/logind.conf
-HandleLidSwitch=ignore
-HandleLidSwitchDocked=ignore
-EOF
+    cp /etc/systemd/logind.conf /etc/systemd/logind.conf.backup 2>/dev/null || true
+    if grep -q '^#\?HandleLidSwitch=' /etc/systemd/logind.conf; then
+            sed -i 's/^#\?HandleLidSwitch=.*/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
+    else
+            echo 'HandleLidSwitch=ignore' >> /etc/systemd/logind.conf
+    fi
+    if grep -q '^#\?HandleLidSwitchDocked=' /etc/systemd/logind.conf; then
+            sed -i 's/^#\?HandleLidSwitchDocked=.*/HandleLidSwitchDocked=ignore/' /etc/systemd/logind.conf
+    else
+            echo 'HandleLidSwitchDocked=ignore' >> /etc/systemd/logind.conf
+    fi
   systemctl restart systemd-logind
 else
   echo "     skip closed lid configuration "
@@ -359,7 +358,8 @@ echo "   Now, do you have a USB device available for backups (do not plug it in 
 read -p "   Would you like the next script to prepare this drive for 🛟 backups❓ (y/n): " usb_response
 if [[ "$usb_response" == "y" || "$usb_response" == "Y" ]]; then
     echo "   ⚙️ open and run freezer.sh"
-    wget -O /home/$SUDO_USER/freezer.sh https://raw.githubusercontent.com/lerez0/butter-t0aster/main/freezer.sh || { echo "🛑 failed to download freezer.sh " >&2; exit 1; }
-    chmod +x /home/$SUDO_USER/freezer.sh
-    sudo bash /home/$SUDO_USER/freezer.sh
+    FREEZER_PATH="/home/$SUDO_USER/freezer.sh"
+    wget -O "$FREEZER_PATH" https://raw.githubusercontent.com/lerez0/butter-t0aster/main/freezer.sh || { echo "🛑 failed to download freezer.sh " >&2; exit 1; }
+    chmod +x "$FREEZER_PATH"
+    sudo bash "$FREEZER_PATH"
 fi
